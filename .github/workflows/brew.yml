@@ -42,7 +42,9 @@ jobs:
             arch: x86_64
     steps:
       - name: Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        # Pinneado a una tag inmutable de Homebrew/actions: `@master` no existe
+        # (la rama por defecto del repo es `main`) y fallaba al resolver la accion.
+        uses: Homebrew/actions/setup-homebrew@2026.11.02.1
 
       - name: Tap
         run: brew tap jmanuelcorral/tap
