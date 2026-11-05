@@ -1,0 +1,68 @@
+name: brew
+
+# Se comprueba una sola cosa: que alguien pueda instalar bond desde este tap y que el
+# binario que cae es la version que dice la formula. Los hashes los escribe
+# scripts/packaging.mts desde SHA256SUMS de la release, asi que si una URL cambia
+# o la formula se queda apuntando a bytes viejos, esto lo pilla antes que el
+# `brew upgrade` de nadie.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Formula/**"
+      - ".github/workflows/brew.yml"
+  workflow_dispatch:
+  schedule:
+    # Un lunes por la manana: si una release se re-corta o un asset se re-sube,
+    # la formula queda apuntando a algo que ya no cuadra y esto es lo que avisa.
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brew-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+          - os: macos-13
+            arch: x86_64
+          - os: ubuntu-latest
+            arch: x86_64
+    steps:
+      - name: Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Tap
+        run: brew tap jmanuelcorral/tap
+
+      - name: Instalar
+        run: brew install jmanuelcorral/tap/bond
+
+      - name: Version instalada
+        run: |
+          set -euo pipefail
+          echo "bond --version -> $(bond --version)"
+          echo "brew list --versions -> $(brew list --versions bond)"
+
+      - name: El binario responde a lo que promete la formula
+        run: |
+          set -euo pipefail
+          formula="$(brew info --json=v2 jmanuelcorral/tap/bond | jq -r '.formulae[0].versions.stable')"
+          installed="$(bond --version)"
+          echo "formula=$formula installed=$installed"
+          [ "$formula" = "$installed" ] || { echo "la version instalada no es la de la formula"; exit 1; }
+
+      - name: Test de la formula
+        run: brew test jmanuelcorral/tap/bond
